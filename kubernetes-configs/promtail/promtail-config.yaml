@@ -1,0 +1,77 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: promtail-config
+  namespace: monitoring
+data:
+  promtail.yaml: |
+    server:
+      http_listen_port: 9080
+      grpc_listen_port: 0
+    positions:
+      filename: /tmp/positions.yaml
+    clients:
+      - url: http://loki.monitoring.svc.cluster.local:3100/loki/api/v1/push
+        timeout: 10s
+    
+    scrape_configs:
+    # Collect logs from ALL pods in ALL namespaces
+    - job_name: kubernetes-pods
+      kubernetes_sd_configs:
+      - role: pod
+        namespaces:
+          names: ["default", "monitoring"]
+      relabel_configs:
+      - source_labels: [__meta_kubernetes_pod_node_name]
+        target_label: node
+      - source_labels: [__meta_kubernetes_pod_name]
+        target_label: pod
+      - source_labels: [__meta_kubernetes_namespace]
+        target_label: namespace
+      - source_labels: [__meta_kubernetes_pod_container_name]
+        target_label: container
+      - action: replace
+        replacement: /var/log/pods/*$1/*.log
+        separator: /
+        source_labels:
+        - __meta_kubernetes_pod_uid
+        - __meta_kubernetes_pod_container_name
+        target_label: __path__
+    
+    # Collect system logs
+    - job_name: system
+      static_configs:
+      - targets: [localhost]
+        labels:
+          job: system
+          __path__: /var/log/syslog
+    
+    # Collect auth logs for security monitoring
+    - job_name: auth
+      static_configs:
+      - targets: [localhost]
+        labels:
+          job: auth
+          __path__: /var/log/auth.log
+    
+    # Collect kernel logs
+    - job_name: kernel
+      static_configs:
+      - targets: [localhost]
+        labels:
+          job: kernel
+          __path__: /var/log/kern.log
+    
+    # Keep your flask-specific config for structured parsing
+    - job_name: flask
+      static_configs:
+      - targets: [localhost]
+        labels:
+          job: flask
+          __path__: /var/log/flask/*.log
+      pipeline_stages:
+      - match:
+          selector: '{job="flask"}'
+          stages:
+          - labels:
+              app: flask-app

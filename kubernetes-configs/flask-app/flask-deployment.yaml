@@ -1,0 +1,48 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: flask-app
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: flask-app
+  template:
+    metadata:
+      annotations:
+        promtail.io/scrape: "true"
+      labels:
+        app: flask-app
+    spec:
+      securityContext:
+        runAsUser: 1000  # Matches what Promtail sees
+        runAsGroup: 1000
+        fsGroup: 1000
+      containers:
+      - name: flask-app
+        command: ["sh", "-c", "gunicorn --bind 0.0.0.0:5000 app:app >> /var/log/flask/app.log 2>&1"]
+        image: amnaa123/flask-app:latest
+        ports:
+        - containerPort: 5000
+        volumeMounts:
+        - name: logs
+          mountPath: /var/log/flask
+      volumes:
+      - name: logs
+        persistentVolumeClaim:
+          claimName: flask-logs
+
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: flask-app
+spec:
+  type: NodePort
+  selector:
+    app: flask-app
+  ports:
+    - port: 5000
+      targetPort: 5000
+      nodePort: 30007

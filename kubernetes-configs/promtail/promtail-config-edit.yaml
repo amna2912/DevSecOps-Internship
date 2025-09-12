@@ -1,0 +1,81 @@
+apiVersion: v1
+data:
+  promtail-config.yaml: |
+    server:
+      http_listen_port: 9080
+      grpc_listen_port: 0
+    positions:
+      filename: /tmp/positions.yaml
+    clients:
+      - url: http://loki.monitoring.svc.cluster.local:3100/loki/api/v1/push
+        timeout: 10s
+
+    scrape_configs:
+    # Collect logs from ALL pods in ALL namespaces
+    - job_name: kubernetes-pods
+      kubernetes_sd_configs:
+      - role: pod
+      relabel_configs:
+      - source_labels: [__meta_kubernetes_pod_node_name]
+        target_label: node
+      - source_labels: [__meta_kubernetes_pod_name]
+        target_label: pod
+      - source_labels: [__meta_kubernetes_namespace]
+        target_label: namespace
+      - source_labels: [__meta_kubernetes_pod_container_name]
+        target_label: container
+      - action: replace
+        replacement: /var/log/pods/*$1/*.log
+        separator: /
+        source_labels:
+        - __meta_kubernetes_pod_uid
+        - __meta_kubernetes_pod_container_name
+        target_label: __path__
+
+    # Collect system logs
+    - job_name: system
+      static_configs:
+      - targets: [localhost]
+        labels:
+          job: system
+          __path__: /var/log/syslog
+
+    # Collect auth logs for security monitoring
+    - job_name: auth
+      static_configs:
+      - targets: [localhost]
+        labels:
+          job: auth
+          __path__: /var/log/auth.log
+
+    # Collect kernel logs
+    - job_name: kernel
+      static_configs:
+      - targets: [localhost]
+        labels:
+          job: kernel
+          __path__: /var/log/kern.log
+
+    # Keep your flask-specific config for structured parsing
+    - job_name: flask
+      static_configs:
+      - targets: [localhost]
+        labels:
+          job: flask
+          __path__: /var/log/flask/*.log
+      pipeline_stages:
+      - match:
+          selector: '{job="flask"}'
+          stages:
+          - labels:
+              app: flask-app
+kind: ConfigMap
+metadata:
+  annotations:
+    kubectl.kubernetes.io/last-applied-configuration: |
+      {"apiVersion":"v1","data":{"promtail-config.yaml":"server:\n  http_listen_port: 9080\n  grpc_listen_port: 0\npositions:\n  filename: /tmp/positions.yaml\nclients:\n  - url: http://loki:3100/loki/api/v1/push\n    timeout: 10s\n\nscrape_configs:\n# Collect logs from ALL pods in ALL namespaces\n- job_name: kubernetes-pods\n  kubernetes_sd_configs:\n  - role: pod\n  relabel_configs:\n  - source_labels: [__meta_kubernetes_pod_node_name]\n    target_label: node\n  - source_labels: [__meta_kubernetes_pod_name]\n    target_label: pod\n  - source_labels: [__meta_kubernetes_namespace]\n    target_label: namespace\n  - source_labels: [__meta_kubernetes_pod_container_name]\n    target_label: container\n  - action: replace\n    replacement: /var/log/pods/*$1/*.log\n    separator: /\n    source_labels:\n    - __meta_kubernetes_pod_uid\n    - __meta_kubernetes_pod_container_name\n    target_label: __path__\n\n# Collect system logs\n- job_name: system\n  static_configs:\n  - targets: [localhost]\n    labels:\n      job: system\n      __path__: /var/log/syslog\n\n# Collect auth logs for security monitoring\n- job_name: auth\n  static_configs:\n  - targets: [localhost]\n    labels:\n      job: auth\n      __path__: /var/log/auth.log\n\n# Collect kernel logs\n- job_name: kernel\n  static_configs:\n  - targets: [localhost]\n    labels:\n      job: kernel\n      __path__: /var/log/kern.log\n\n# Keep your flask-specific config for structured parsing\n- job_name: flask\n  static_configs:\n  - targets: [localhost]\n    labels:\n      job: flask\n      __path__: /var/log/flask/*.log\n  pipeline_stages:\n  - match:\n      selector: '{job=\"flask\"}'\n      stages:\n      - labels:\n          app: flask-app\n"},"kind":"ConfigMap","metadata":{"annotations":{},"name":"promtail-config","namespace":"monitoring"}}
+  creationTimestamp: "2025-08-18T20:37:58Z"
+  name: promtail-config
+  namespace: monitoring
+  resourceVersion: "115705"
+  uid: 9c299f14-5398-43f7-b0f8-7ac6b3fcc96c
